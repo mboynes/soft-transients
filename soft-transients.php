@@ -118,7 +118,7 @@ function delete_soft_transient( $transient_key, $action = null ) {
 		$action = 'transient_refresh_' . $transient_key;
 	}
 
-	if ( $timestamp = wp_next_scheduled( $action ) ) {
+	if ( $timestamp = wp_next_scheduled( $action, array( $transient_key ) ) ) {
 		wp_unschedule_event( $timestamp, $action, array( $transient_key ) );
 	}
 

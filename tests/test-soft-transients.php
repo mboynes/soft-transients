@@ -45,31 +45,69 @@ class Tests_Option_Transient extends WP_UnitTestCase {
 		$this->assertTrue( delete_soft_transient( $key ) );
 	}
 
-	function test_transient_data_with_timeout() {
-		if ( is_multisite() ) {
-			$this->markTestSkipped( 'Not testable in MS: wpmu_create_blog() defines WP_INSTALLING.' );
-		}
+	public function test_soft_transient_default_actions() {
+		$key = rand_str();
+		$value = rand_str();
 
+		$this->assertTrue( set_soft_transient( $key, $value, 100 ) );
+		$this->assertEquals( $value, get_soft_transient( $key ) );
+
+		// Get the actual stored value of the transient and expire it
+		$stored_value = get_transient( $key );
+		$this->assertTrue( array_key_exists( 'action', $stored_value ) );
+		$this->assertEquals( null, $stored_value['action'] );
+		$stored_value['expiration'] = time() - 1;
+		set_transient( $key, $stored_value );
+
+		// Ensure that when the expired transient is accessed, deletion is
+		// scheduled with the default action
+		$this->assertEquals( $value, get_soft_transient( $key ) );
+		$this->assertTrue( wp_next_scheduled( 'transient_refresh_' . $key, array( $key ) ) > 0 );
+		$this->assertTrue( delete_soft_transient( $key ) );
+		$this->assertFalse( wp_next_scheduled( 'transient_refresh_' . $key, array( $key ) ) );
+	}
+
+	public function test_soft_transient_custom_actions() {
+		$key = rand_str();
+		$value = rand_str();
+
+		// Create the transient with a custom action
+		$this->assertTrue( set_soft_transient( $key, $value, 100, 'test_soft_transient_0' ) );
+		$this->assertEquals( $value, get_soft_transient( $key ) );
+
+		// Get the actual stored value of the transient and expire it
+		$stored_value = get_transient( $key );
+		$this->assertFalse( empty( $stored_value['action'] ) );
+		$this->assertEquals( 'test_soft_transient_0', $stored_value['action'] );
+		$stored_value['expiration'] = time() - 1;
+		set_transient( $key, $stored_value );
+
+		// Ensure that when the expired transient is accessed, deletion is
+		// scheduled with the custom action
+		$this->assertEquals( $value, get_soft_transient( $key ) );
+		$this->assertTrue( wp_next_scheduled( 'test_soft_transient_0', array( $key ) ) > 0 );
+		$this->assertTrue( delete_soft_transient( $key, 'test_soft_transient_0' ) );
+		$this->assertFalse( wp_next_scheduled( 'test_soft_transient_0', array( $key ) ) );
+	}
+
+	function test_soft_transient_data_with_timeout() {
 		$key = rand_str();
 		$value = rand_str();
 
 		$this->assertTrue( set_soft_transient( $key, $value, 100, 'test_soft_transient_1' ) );
+		$this->assertEquals( $value, get_soft_transient( $key ) );
 
 		// Update the timeout to a second in the past and watch the transient be invalidated.
-		$stored_value = get_option( '_transient_' . $key );
+		$stored_value = get_transient( $key );
 		$this->assertFalse( empty( $stored_value['expiration'] ) );
 		$stored_value['expiration'] = time() - 1;
-		update_option( '_transient_' . $key, $stored_value );
+		set_transient( $key, $stored_value );
 
 		$this->assertEquals( $value, get_soft_transient( $key ) );
 		$this->assertTrue( wp_next_scheduled( 'test_soft_transient_1', array( $key ) ) > 0 );
 	}
 
-	function test_transient_add_timeout() {
-		if ( is_multisite() ) {
-			$this->markTestSkipped( 'Not testable in MS: wpmu_create_blog() defines WP_INSTALLING.' );
-		}
-
+	function test_soft_transient_add_timeout() {
 		$key = rand_str();
 		$value = rand_str();
 		$value2 = rand_str();
@@ -80,10 +118,10 @@ class Tests_Option_Transient extends WP_UnitTestCase {
 
 		// Add timeout to existing timeout-less transient.
 		$this->assertTrue( set_soft_transient( $key, $value2, 1, 'test_soft_transient_2' ) );
-		$stored_value = get_option( '_transient_' . $key );
+		$stored_value = get_transient( $key );
 		$this->assertFalse( empty( $stored_value['expiration'] ) );
 		$stored_value['expiration'] = time() - 1;
-		update_option( '_transient_' . $key, $stored_value );
+		set_transient( $key, $stored_value );
 
 		$this->assertEquals( $value2, get_soft_transient( $key ) );
 		$this->assertTrue( wp_next_scheduled( 'test_soft_transient_2', array( $key ) ) > 0 );
